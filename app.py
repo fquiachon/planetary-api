@@ -1,15 +1,67 @@
 from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import Column, Integer, String, Float
+from flask_marshmallow import Marshmallow
+import os
 
 
 app = Flask(__name__)
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'planets.db')
+
+db = SQLAlchemy(app)
+ma = Marshmallow(app)
+
+
+@app.cli.command('db_create')
+def db_create():
+    db.create_all()
+    print('DB created!')
+
+
+@app.cli.command('db_drop')
+def db_drop():
+    db.drop_all()
+    print('DB dropped!')
+
+
+@app.cli.command('db_seed')
+def db_seed():
+    mercury = Planet(planet_name='Mercury',
+                     planet_type='Type M',
+                     home_star='Sol',
+                     mass=1233e4,
+                     radius=1233e5,
+                     distance=1233e6
+                     )
+    venus = Planet(planet_name='Venus',
+                     planet_type='Type V',
+                     home_star='Sol',
+                     mass=1233e7,
+                     radius=1233e8,
+                     distance=1233e9
+                     )
+    db.session.add(mercury)
+    db.session.add(venus)
+
+    test_user = User(first_name='Kiko',
+                     last_name='quiachon',
+                     email='test@test.com',
+                     password='P@ssw0rd')
+    db.session.add(test_user)
+    db.session.commit()
+    print('DB seeded!')
+
 
 @app.route('/')
 def welcome():
     return jsonify(message="Welcom to Planetary API 2020"), 200
 
+
 @app.route('/simple_api')
 def simple_api():
     return jsonify(message="Simple API"), 200
+
 
 @app.route('/parameters')
 def parameters():
@@ -27,6 +79,50 @@ def url_variables(name: str, age: int):
         return jsonify(message=f"Sorry {name}, you are not allowed"), 401
     else:
         return jsonify(message=f"Welcome {name}, you are old enough"), 200
+
+
+@app.route('/planets', methods=['GET'])
+def planets():
+    planet_list = Planet.query.all()
+    result = planets_schema.dump(planet_list)
+    return jsonify(result)
+
+
+# DB Models
+class User(db.Model):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    email = Column(String, unique=True)
+    password = Column(String)
+
+
+class Planet(db.Model):
+    __tablename__ = "planets"
+    planet_id = Column(Integer, primary_key=True)
+    planet_name = Column(String)
+    planet_type = Column(String)
+    home_star = Column(String)
+    mass = Column(Float)
+    radius = Column(Float)
+    distance = Column(Float)
+
+
+class UserSchema(ma.Schema):
+    class Meta:
+        fields = ['id', 'first_name', 'last_name', 'email', 'password']
+
+
+class PlanetSchema(ma.Schema):
+    class Meta:
+        fields = ['planet_id', 'planet_name', 'planet_type', 'home_star', 'mass', 'radius', 'distance']
+
+
+user_schema = UserSchema()
+users_schema = UserSchema(many=True)
+planet_schema = PlanetSchema()
+planets_schema = PlanetSchema(many=True)
 
 
 if __name__ == '__main__':
